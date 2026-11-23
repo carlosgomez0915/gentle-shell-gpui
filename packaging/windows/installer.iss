@@ -48,8 +48,8 @@ Source: "{#SourceExe}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "gsd.cmd"; DestDir: "{app}\bin"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\Gentle Shell"; Filename: "{app}\gentle-shell-gpui.exe"
-Name: "{autodesktop}\Gentle Shell"; Filename: "{app}\gentle-shell-gpui.exe"; Tasks: desktopicon
+Name: "{autoprograms}\Gentle Shell"; Filename: "{app}\gentle-shell-gpui.exe"; AppUserModelID: "dev.gentle-shell.gpui"
+Name: "{autodesktop}\Gentle Shell"; Filename: "{app}\gentle-shell-gpui.exe"; Tasks: desktopicon; AppUserModelID: "dev.gentle-shell.gpui"
 
 [Run]
 Filename: "{app}\gentle-shell-gpui.exe"; Description: "{cm:LaunchProgram,Gentle Shell}"; Flags: nowait postinstall skipifsilent

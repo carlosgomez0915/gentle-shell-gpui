@@ -112,7 +112,11 @@ fn prune(node: Value) -> Option<(Value, bool)> {
 
 pub fn save(state: &SavedState) -> std::io::Result<()> {
     match file_path() {
-        Some(path) => save_to(&path, state),
+        Some(path) => {
+            save_to(&path, state)?;
+            crate::platform::recent_workspaces::publish(state);
+            Ok(())
+        }
         None => Ok(()),
     }
 }

@@ -30,6 +30,7 @@ pub fn run(
     selected: Option<crate::features::workspaces::SavedState>,
     requests: async_channel::Receiver<instance::Incoming>,
 ) {
+    crate::platform::recent_workspaces::init();
     gpui_kit::application()
         .with_assets(assets::AppAssets)
         .run(move |cx| {
@@ -72,7 +73,7 @@ pub fn run(
                     // Centered in the 36 px title bar (workspace.rs).
                     traffic_light_position: Some(point(px(14.), px(11.))),
                 }),
-                app_id: Some("dev.gentle-shell.gpui".into()),
+                app_id: crate::platform::recent_workspaces::app_id().map(Into::into),
                 #[cfg(target_os = "linux")]
                 icon: crate::platform::icons::window_icon(),
                 ..TitleBar::window_options()
