@@ -759,7 +759,7 @@ cargo run --release -- [FOLDER] [--prompt "first message"]
 | `GENTLE_SHELL_BIN` | Path of the launcher to use instead of `gentle-shell` on `PATH`. |
 | `GENTLE_SHELL_ARGS` | Launcher options placed before `--mode rpc`, such as `--link` or `--home "<dir>"` (quote paths with spaces). The app also uses them to find `auth.json` and the config home. |
 
-Only one app runs per user, whatever the build: a second launch hands its folder and `--prompt` to the running window and exits.
+Only one app runs per user, whatever the build: a second launch hands its folder and `--prompt` to the running window and exits. `--workspace-id ID` selects the exact saved workspace and focuses the running window. It cannot accompany a folder, `--cwd`, prompt or URL. A stale ID reports an error: cold launch exits without opening another workspace; a running app keeps its selection. Without this option, startup is unchanged. `--help` shows CLI usage.
 
 Gentle Shell's own variables (`GENTLE_PI_CONFIG_HOME`, `GENTLE_SHELL_NO_AUTO_SETUP`, provider API keys, and the rest) pass through to the backend.
 

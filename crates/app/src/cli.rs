@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 /// `gentle-shell-gpui [FOLDER] [--cwd] [-p|--prompt TEXT]`
 pub struct Cli {
+    pub workspace_id: Option<String>,
     pub folder: Option<PathBuf>,
     /// `--cwd`: without `FOLDER`, open the folder the app was launched in
     /// (what `gsd` passes). A plain launch doesn't: the Start menu or Finder
@@ -15,20 +16,43 @@ pub struct Cli {
     pub url: Option<String>,
 }
 
+pub const HELP: &str = "gentle-shell-gpui [FOLDER] [--cwd] [-p|--prompt TEXT] [--open-url URL] [--diagnostics]\ngentle-shell-gpui --workspace-id ID [--diagnostics]\n\n--workspace-id ID selects exactly one saved workspace (no folder, --cwd, prompt or URL).\nA missing ID fails on cold launch; a running app keeps its selection.";
+
 pub fn parse_cli() -> Cli {
+    parse_args(std::env::args_os().skip(1)).unwrap_or_else(|error| {
+        eprintln!("gentle-shell-gpui: {error}");
+        std::process::exit(2);
+    })
+}
+
+pub fn parse_args(args: impl IntoIterator<Item = std::ffi::OsString>) -> Result<Cli, String> {
     let mut cli = Cli {
+        workspace_id: None,
         folder: None,
         here: false,
         prompt: None,
         url: None,
     };
-    let mut args = std::env::args_os().skip(1);
+    let mut content_option = false;
+    let mut args = args.into_iter();
     while let Some(arg) = args.next() {
-        if arg == "-p" || arg == "--prompt" {
+        if arg == "--workspace-id" {
+            if cli.workspace_id.is_some() {
+                return Err("--workspace-id may only be specified once".into());
+            }
+            let id = args
+                .next()
+                .and_then(|id| id.into_string().ok())
+                .filter(|id| !id.trim().is_empty() && !id.starts_with('-'))
+                .ok_or("--workspace-id expects an ID")?;
+            cli.workspace_id = Some(id);
+        } else if arg == "-p" || arg == "--prompt" {
+            content_option = true;
             cli.prompt = args.next().map(|p| p.to_string_lossy().into_owned());
         } else if arg == "--cwd" {
             cli.here = true;
         } else if arg == "--open-url" || arg == "--url" {
+            content_option = true;
             cli.url = Some(
                 args.next()
                     .map(|p| p.to_string_lossy().into_owned())
@@ -40,7 +64,10 @@ pub fn parse_cli() -> Cli {
             cli.folder = Some(PathBuf::from(arg));
         }
     }
-    cli
+    if cli.workspace_id.is_some() && (cli.folder.is_some() || cli.here || content_option) {
+        return Err("--workspace-id cannot be combined with a folder, prompt or URL".into());
+    }
+    Ok(cli)
 }
 
 /// The folder the first tab opens: the CLI argument, else the folder the app
