@@ -27,6 +27,7 @@ pub fn run(
     folder: Option<PathBuf>,
     prompt: Option<String>,
     url: Option<String>,
+    selected: Option<crate::features::workspaces::SavedState>,
     requests: async_channel::Receiver<instance::Incoming>,
 ) {
     gpui_kit::application()
@@ -79,7 +80,14 @@ pub fn run(
             integration::register(cx);
             let (handle, workspace) = gpui_kit::open_window(options, cx, |window, cx| {
                 let workspace = cx.new(|cx| {
-                    Workspace::new(folder.clone(), prompt.clone(), url.clone(), window, cx)
+                    Workspace::new(
+                        folder.clone(),
+                        prompt.clone(),
+                        url.clone(),
+                        selected.clone(),
+                        window,
+                        cx,
+                    )
                 });
                 integration::attach_sidebar(&workspace, window, cx);
                 workspace

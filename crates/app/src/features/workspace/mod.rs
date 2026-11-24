@@ -443,10 +443,11 @@ impl Workspace {
         folder: Option<PathBuf>,
         prompt: Option<String>,
         url: Option<String>,
+        selected: Option<workspaces::SavedState>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let saved = workspaces::load();
+        let saved = selected.unwrap_or_else(workspaces::load);
         let mut restored = Vec::new();
         let spaces: Vec<Space> = saved
             .workspaces

@@ -14,6 +14,10 @@ fn main() {
     // agents' commands) and `--diagnostics-report` run here and exit.
     let mut args = std::env::args().skip(1);
     match args.next().as_deref() {
+        Some("--help" | "-h") => {
+            println!("{}", cli::HELP);
+            return;
+        }
         Some("--device") => std::process::exit(features::devices::cli::run(args.collect())),
         Some("--browser") => std::process::exit(features::browser::cli::run(args.collect())),
         Some("--screen") => std::process::exit(features::screen::cli::run(args.collect())),
@@ -36,7 +40,7 @@ fn main() {
     }
     // Only one app per user: a second launch hands its request over and exits.
     let request = instance::OpenRequest {
-        workspace_id: None,
+        workspace_id: cli.workspace_id.clone(),
         folder: folder.clone(),
         prompt: prompt.clone(),
         url: url.clone(),
@@ -60,6 +64,14 @@ fn main() {
         }
         instance::Role::Primary(requests) => requests,
     };
+    let selected = features::workspaces::select_launch(
+        cli.workspace_id.as_deref(),
+        features::workspaces::load,
+    )
+    .unwrap_or_else(|message| {
+        eprintln!("gentle-shell-gpui: {message}");
+        std::process::exit(2);
+    });
     // Windows can't rename a folder a process works in, and a shortcut may
     // start the app in its install folder: work from a neutral folder so an
     // update can replace the install. The first tab still opens where the
@@ -111,5 +123,5 @@ fn main() {
             eprintln!("Could not copy Gentle Shell's settings to its new folder: {error}")
         }
     }
-    app::run(folder, prompt, url, requests);
+    app::run(folder, prompt, url, selected, requests);
 }

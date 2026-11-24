@@ -54,6 +54,8 @@ cargo build --profile dist -p gentle-shell-gpui   # as in a release
 
 | Argument | Effect |
 | --- | --- |
+| `--workspace-id ID` | Selects the exact saved opaque ID, including same-root siblings. Cannot accompany a folder, `--cwd`, prompt or URL; may accompany `--diagnostics`. A stale ID exits with a diagnostic on cold launch, or keeps selection in the running app. Ordinary startup is unchanged. |
+| `--help`, `-h` | Prints CLI usage and exits. |
 | `FOLDER` | Selects (or creates) the workspace with that root. Ignored if it is not a directory. Without a folder, the last workspace is restored. |
 | `--cwd` | Without `FOLDER`, opens the folder the app was launched in (`cli::launch_dir`) as a workspace instead of restoring the last one. It is what `gsd` passes; a plain launch (Start menu, Finder, Dock) never uses its launch folder this way. A `FOLDER` that doesn't exist is ignored without falling back to the launch folder. |
 | `-p TEXT`, `--prompt TEXT` | Opens a new agent tab and, once the backend starts, runs the text as if it had been typed in the composer (`SessionView::run_text` in `features/session/submit.rs`). |

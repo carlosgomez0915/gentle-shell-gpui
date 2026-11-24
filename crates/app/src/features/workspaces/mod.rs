@@ -30,6 +30,20 @@ pub fn workspace_index<'a>(
         .ok_or_else(|| format!("workspace ID not found: {id}"))
 }
 
+/// Prepare explicit cold launches only, keeping the validated snapshot.
+/// Ordinary startup retains its lazy load in Workspace::new.
+pub fn select_launch(
+    id: Option<&str>,
+    load: impl FnOnce() -> SavedState,
+) -> Result<Option<SavedState>, String> {
+    let Some(id) = id else {
+        return Ok(None);
+    };
+    let mut saved = load();
+    saved.current = workspace_index(id, saved.workspaces.iter().map(|w| w.id.as_str()))?;
+    Ok(Some(saved))
+}
+
 /// One pane as saved: enough to build it again.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SavedPane {
