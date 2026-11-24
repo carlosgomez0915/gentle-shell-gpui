@@ -142,6 +142,8 @@ The branch must contain `shared/data_dir.rs`: an older one ignores the variable 
 
 On Linux the settings are in `~/.local/share/gentle-shell-gpui/`; on Windows (PowerShell) `$env:APPDATA\gentle-shell-gpui\`, with `$env:GENTLE_SHELL_GPUI_DATA_DIR = "<folder>"` before running the exe. Unlike a temporary `HOME`, this also isolates the app on Windows.
 
+On Windows, the taskbar icon's Jump List shows recently saved workspaces (name and folder); selecting one reopens its workspace ID through the single-instance launcher. The process, destination list and installer shortcuts share `dev.gentle-shell.gpui`. Existing taskbar pins may need to be unpinned and pinned again after installing this version; development must not change anyone's pins. A nonempty `GENTLE_SHELL_GPUI_DATA_DIR` disables this Windows identity and Jump List publication. An empty value uses production storage, just as it does elsewhere in the app. Verify native publication only in a disposable Windows user/VM with no override, never against a real user's Jump List. Isolated app tests cannot verify shell publication.
+
 What stays shared: agent tabs run your real Gentle Shell, so sessions, memories and sign-ins are the real ones, and an agent edits the folder you open (hence the empty `mktemp -d` folder above). The toolchain the app installs (Maestro, Java, music, the diagram renderer) isn't in the new folder; link it if a test needs it: `ln -s "$HOME/Library/Application Support/gentle-shell-gpui/toolchain" "$sandbox/toolchain"`.
 
 ### Temporary HOME (first run)

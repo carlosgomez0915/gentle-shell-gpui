@@ -8,4 +8,5 @@ pub mod icons;
 pub mod ides;
 pub mod instance;
 pub mod power;
+pub mod recent_workspaces;
 pub mod shims;
