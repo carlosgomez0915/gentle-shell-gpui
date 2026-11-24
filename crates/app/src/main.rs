@@ -36,6 +36,7 @@ fn main() {
     }
     // Only one app per user: a second launch hands its request over and exits.
     let request = instance::OpenRequest {
+        workspace_id: None,
         folder: folder.clone(),
         prompt: prompt.clone(),
         url: url.clone(),
@@ -50,6 +51,12 @@ fn main() {
                 );
             }
             return;
+        }
+        instance::Role::SelectorUnconfirmed => {
+            eprintln!(
+                "gentle-shell-gpui: the running app did not confirm workspace selection support; quit it and retry with this version"
+            );
+            std::process::exit(2);
         }
         instance::Role::Primary(requests) => requests,
     };

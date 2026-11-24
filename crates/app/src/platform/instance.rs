@@ -15,6 +15,9 @@ use serde::{Deserialize, Serialize};
 /// What a second launch asks the running app to do.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct OpenRequest {
+    /// Exact saved workspace, never a root-folder fallback.
+    #[serde(default)]
+    pub workspace_id: Option<String>,
     pub folder: Option<PathBuf>,
     pub prompt: Option<String>,
     /// A page to show in the in-app browser (`gentle-open`).
@@ -58,6 +61,8 @@ pub enum Role {
     Primary(async_channel::Receiver<Incoming>),
     /// Another instance took the request; exit.
     Forwarded,
+    /// A reachable peer did not confirm selector support; never open a fallback.
+    SelectorUnconfirmed,
 }
 
 fn record_path() -> Option<PathBuf> {
@@ -69,8 +74,10 @@ pub fn claim(request: &OpenRequest) -> Role {
     let Some(path) = record_path() else {
         return Role::Primary(async_channel::unbounded().1);
     };
-    if forward(&path, request) {
-        return Role::Forwarded;
+    match forward(&path, request) {
+        Ok(true) => return Role::Forwarded,
+        Err(()) => return Role::SelectorUnconfirmed,
+        Ok(false) => {}
     }
     match listen(&path) {
         Ok(rx) => Role::Primary(rx),
@@ -82,7 +89,7 @@ pub fn claim(request: &OpenRequest) -> Role {
 /// Hand `request` to the running app; false when none answers. Commands
 /// (`gentle-device`) use it: they never become the app themselves.
 pub fn send(request: &OpenRequest) -> bool {
-    record_path().is_some_and(|path| forward(&path, request))
+    record_path().is_some_and(|path| forward(&path, request).unwrap_or(false))
 }
 
 /// The running app's address and token, if one is recorded.
@@ -92,13 +99,19 @@ fn record(path: &Path) -> Option<Record> {
         .and_then(|raw| serde_json::from_str::<Record>(&raw).ok())
 }
 
-fn forward(path: &Path, request: &OpenRequest) -> bool {
+fn forward(path: &Path, request: &OpenRequest) -> Result<bool, ()> {
     let Some(record) = record(path) else {
-        return false;
+        return Ok(false);
     };
     let addr = SocketAddr::from(([127, 0, 0, 1], record.port));
     let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(400)) else {
-        return false;
+        return Ok(false);
+    };
+    // Once connected, an unconfirmed selector must not become a new primary.
+    let unconfirmed = if request.workspace_id.is_some() {
+        Err(())
+    } else {
+        Ok(false)
     };
     let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
     let message = Message {
@@ -107,15 +120,23 @@ fn forward(path: &Path, request: &OpenRequest) -> bool {
         browser: None,
     };
     let Ok(mut line) = serde_json::to_vec(&message) else {
-        return false;
+        return unconfirmed;
     };
     line.push(b'\n');
     if stream.write_all(&line).is_err() {
-        return false;
+        return unconfirmed;
     }
-    // The primary acknowledges with "ok" once it accepted the token.
     let mut reply = String::new();
-    BufReader::new(stream).read_line(&mut reply).is_ok() && reply.trim() == "ok"
+    let read = BufReader::new(stream).read_line(&mut reply).is_ok();
+    if request.workspace_id.is_some() {
+        if read && reply == "workspace-id-v1\n" {
+            Ok(true)
+        } else {
+            unconfirmed
+        }
+    } else {
+        Ok(read && reply.trim() == "ok")
+    }
 }
 
 /// Hand a `gentle-browser` operation to the running app and wait up to
@@ -191,7 +212,12 @@ fn listen(path: &Path) -> std::io::Result<async_channel::Receiver<Incoming>> {
                         .spawn(move || answer_browser(stream, op, &tx));
                     continue;
                 }
-                let _ = stream.write_all(b"ok\n");
+                let ack: &[u8] = if message.request.workspace_id.is_some() {
+                    b"workspace-id-v1\n"
+                } else {
+                    b"ok\n"
+                };
+                let _ = stream.write_all(ack);
                 if tx.send_blocking(Incoming::Open(message.request)).is_err() {
                     return;
                 }
@@ -252,20 +278,52 @@ mod tests {
             .join("instance.json");
         let rx = listen(&path).expect("primary listens");
         let request = OpenRequest {
+            workspace_id: Some("same-root-sibling".into()),
             folder: Some("/tmp".into()),
             prompt: Some("hola".into()),
             url: None,
             device: None,
         };
-        assert!(forward(&path, &request), "a live primary accepts");
+        assert_eq!(forward(&path, &request), Ok(true), "a live primary accepts");
         match rx.recv_blocking().unwrap() {
             Incoming::Open(received) => assert_eq!(received, request),
             Incoming::Browser { .. } => panic!("an open request arrives as Open"),
         }
 
+        // Check the actual wire ACK independently of forward's interpretation.
+        use std::io::{BufRead, Write};
+        let record = super::record(&path).unwrap();
+        for request in [
+            request.clone(),
+            OpenRequest::default(),
+            OpenRequest {
+                device: Some(vec!["list".into()]),
+                ..Default::default()
+            },
+        ] {
+            let mut stream = std::net::TcpStream::connect(("127.0.0.1", record.port)).unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                .unwrap();
+            let message = serde_json::json!({"token": record.token, "request": request});
+            writeln!(stream, "{message}").unwrap();
+            let mut ack = String::new();
+            std::io::BufReader::new(stream).read_line(&mut ack).unwrap();
+            let expected = if request.workspace_id.is_some() {
+                "workspace-id-v1\n"
+            } else {
+                "ok\n"
+            };
+            assert_eq!(ack, expected);
+            match rx.recv_blocking().unwrap() {
+                Incoming::Open(received) => assert_eq!(received, request),
+                Incoming::Browser { .. } => panic!("expected open"),
+            }
+        }
+
         // A record pointing at a dead listener means "become primary".
         std::fs::write(&path, r#"{"port":1,"token":"x","pid":1}"#).unwrap();
-        assert!(!forward(&path, &request));
+        assert_eq!(forward(&path, &request), Ok(false));
         std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 }

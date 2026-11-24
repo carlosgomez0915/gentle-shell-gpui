@@ -49,6 +49,8 @@ use gentle_core::commands::Screen;
 mod actions;
 mod badge;
 mod closed;
+#[cfg(test)]
+mod launch_tests;
 mod layout;
 mod menu;
 mod overlays;
@@ -629,7 +631,32 @@ impl Workspace {
             prompt,
             url,
             device,
+            workspace_id,
         } = request;
+        if let Some(id) = workspace_id {
+            let target =
+                workspaces::workspace_index(&id, self.spaces.iter().map(|s| s.id.as_str()));
+            let index = match target {
+                Ok(index) => index,
+                Err(message) => {
+                    eprintln!("gentle-shell-gpui: {message}");
+                    self.notices.update(cx, |store, cx| {
+                        store.push(
+                            gentle_core::transcript::NoticeLevel::Warning,
+                            message,
+                            "Workspaces".into(),
+                            None,
+                            std::time::Instant::now(),
+                        );
+                        cx.notify();
+                    });
+                    cx.notify();
+                    return;
+                }
+            };
+            self.switch_workspace(index, window, cx);
+            return;
+        }
         if let Some(folder) = folder {
             self.show_folder(folder, window, cx);
         }

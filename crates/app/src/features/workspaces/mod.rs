@@ -19,6 +19,17 @@ mod tests;
 pub use gentle_core::workspaces::unique_name;
 pub use store::{load, save};
 
+/// Resolve an explicit identity, never a workspace with a matching root.
+/// Both cold startup and the running window use this boundary.
+pub fn workspace_index<'a>(
+    id: &str,
+    ids: impl IntoIterator<Item = &'a str>,
+) -> Result<usize, String> {
+    ids.into_iter()
+        .position(|candidate| candidate == id)
+        .ok_or_else(|| format!("workspace ID not found: {id}"))
+}
+
 /// One pane as saved: enough to build it again.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SavedPane {
