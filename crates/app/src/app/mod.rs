@@ -97,6 +97,17 @@ pub fn run(
             // Requests from later launches: bring this window forward and act on them.
             // Weak, so quitting releases the workspace (and stops its tabs' backends).
             let workspace = workspace.downgrade();
+            #[cfg(target_os = "macos")]
+            {
+                let workspace = workspace.clone();
+                crate::platform::recent_workspaces::macos::install(cx, move |request, cx| {
+                    let _ = handle.update(cx, |_, window, cx| {
+                        window.activate_window();
+                        let _ = workspace.update(cx, |w, cx| w.open_request(request, window, cx));
+                    });
+                    cx.activate(true);
+                });
+            }
             cx.spawn(async move |cx| {
                 while let Ok(incoming) = requests.recv().await {
                     let request = match incoming {
