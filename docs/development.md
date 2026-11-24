@@ -146,6 +146,41 @@ On Windows, the taskbar icon's Jump List shows recently saved workspaces (name a
 
 What stays shared: agent tabs run your real Gentle Shell, so sessions, memories and sign-ins are the real ones, and an agent edits the folder you open (hence the empty `mktemp -d` folder above). The toolchain the app installs (Maestro, Java, music, the diagram renderer) isn't in the new folder; link it if a test needs it: `ln -s "$HOME/Library/Application Support/gentle-shell-gpui/toolchain" "$sandbox/toolchain"`.
 
+### macOS running-app Dock recents (teammate verification)
+
+While the app runs, its Dock menu lists successfully saved workspaces newest first,
+with name and path. Selection uses the exact workspace ID and focuses the existing
+window; a stale entry never selects a same-root sibling. This is a transient GPUI
+menu, not a promise of cached entries or workspace selection after quitting.
+Isolated macOS instances may show their own menu; they do not publish another
+instance's recents. Windows isolation and Jump List behavior are unchanged.
+
+On a Mac, run these checks before considering this feature ready:
+
+```bash
+cargo test --locked -p gentle-shell-gpui platform::recent_workspaces::tests
+cargo fmt --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+cargo build --release --locked -p gentle-shell-gpui
+sandbox="$(mktemp -d)"
+folder="$(mktemp -d)"
+GENTLE_SHELL_GPUI_DATA_DIR="$sandbox" ./target/release/gentle-shell-gpui "$folder"
+```
+
+Use only that isolated window and its process's Dock icon (never the real app).
+Complete welcome normally; do not copy real workspace or settings files. Create
+several workspaces, including same-root siblings and a long/Unicode name/path.
+Check name/path visibility and newest-first order after switching, renaming and
+removing. Select each sibling from the Dock: the exact one becomes active in the
+same window. Minimize, then select: it restores/focuses without a duplicate.
+Repeat selections and saves: entries must not multiply. If a removed entry remains
+visible briefly, choosing it must preserve selection and report the stale ID.
+Quit/relaunch normally and confirm ordinary restore behavior; do not expect cold
+Dock selection. Confirm another isolated instance's menu/state stays independent.
+Record macOS version and results; remove the two scratch directories manually when
+finished. No native macOS compile or interactive proof is available from WSL.
+
 ### Temporary HOME (first run)
 
 ```bash

@@ -1,4 +1,6 @@
-//! Windows Jump Lists. No shell effects for isolated app instances.
+//! Windows Jump Lists and running-app macOS Dock recents.
+#[cfg(any(target_os = "macos", test))]
+pub mod macos;
 #[cfg(any(windows, test))]
 use std::ffi::OsStr;
 
@@ -24,11 +26,13 @@ pub fn init() {
 pub fn publish(state: &crate::features::workspaces::SavedState) {
     #[cfg(windows)]
     windows::publish(state);
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    macos::publish(state);
+    #[cfg(not(any(windows, target_os = "macos")))]
     let _ = state;
 }
 
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 fn project<'a>(
     state: &'a crate::features::workspaces::SavedState,
     removed: &[String],
@@ -48,6 +52,56 @@ fn project<'a>(
         .take(slots)
         .map(|(_, w)| w)
         .collect()
+}
+
+// Only menu-visible metadata crosses the persistence/foreground boundary.
+#[cfg(any(target_os = "macos", test))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct DockRow {
+    id: String,
+    label: String,
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn dock_rows(state: &crate::features::workspaces::SavedState) -> Vec<DockRow> {
+    project(state, &[], usize::MAX)
+        .into_iter()
+        .map(|w| DockRow {
+            id: w.id.clone(),
+            label: format!("{} — {}", w.name, w.root.display()),
+        })
+        .collect()
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn dock_request(id: &str) -> super::instance::OpenRequest {
+    super::instance::OpenRequest {
+        workspace_id: Some(id.to_owned()),
+        ..Default::default()
+    }
+}
+
+#[cfg(any(target_os = "macos", test))]
+#[derive(Default)]
+struct DockUpdates {
+    pending: Option<Vec<DockRow>>,
+    shown: Vec<DockRow>,
+}
+
+#[cfg(any(target_os = "macos", test))]
+impl DockUpdates {
+    fn push(&mut self, rows: Vec<DockRow>) {
+        self.pending = Some(rows);
+    }
+
+    fn take_changed(&mut self) -> Option<Vec<DockRow>> {
+        let rows = self.pending.take()?;
+        if rows == self.shown {
+            return None;
+        }
+        self.shown = rows.clone();
+        Some(rows)
+    }
 }
 
 #[cfg(windows)]
@@ -185,6 +239,47 @@ mod windows {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dock_projection_coalesces_and_dispatches_only_identity() {
+        let mut state = serde_json::from_value(serde_json::json!({
+            "workspaces": [
+                {"id": "11111111111111111111111111111111", "name": "older", "root": "same", "last_active": 1},
+                {"id": "22222222222222222222222222222222", "name": "newer", "root": "same", "last_active": 2}
+            ]
+        })).unwrap();
+        let rows = dock_rows(&state);
+        assert_eq!(rows[0].label, "newer — same");
+        assert_eq!(rows[1].label, "older — same");
+        let request = dock_request(&rows[0].id);
+        assert_eq!(request.workspace_id.as_deref(), Some(rows[0].id.as_str()));
+        assert_eq!(
+            request,
+            super::super::instance::OpenRequest {
+                workspace_id: Some(rows[0].id.clone()),
+                ..Default::default()
+            }
+        );
+        // A stale ID must reach the existing exact-ID resolver unchanged.
+        assert_eq!(dock_request("stale").workspace_id.as_deref(), Some("stale"));
+        let mut pending = DockUpdates::default();
+        pending.push(rows.clone());
+        pending.push(rows.clone());
+        assert_eq!(pending.take_changed(), Some(rows.clone()));
+        pending.push(rows);
+        assert_eq!(pending.take_changed(), None);
+        state.workspaces[1].name = "renamed".into();
+        pending.push(dock_rows(&state));
+        let renamed = pending.take_changed().unwrap();
+        assert_eq!(renamed[0].label, "renamed — same");
+        assert_eq!(renamed[0].id, request.workspace_id.unwrap());
+        // Coalesce intermediate snapshots, including an eventual empty menu.
+        pending.push(renamed);
+        state.workspaces.clear();
+        pending.push(dock_rows(&state));
+        assert_eq!(pending.take_changed(), Some(vec![]));
+        assert_eq!(pending.take_changed(), None);
+    }
+
     #[test]
     fn isolation_matches_storage_override() {
         assert!(!isolated(None));
